@@ -1,0 +1,521 @@
+#cloud-config
+
+# https://www.tecmint.com/list-php-modules-in-linux/
+# https://cloudinit.readthedocs.io/en/latest/topics/examples.html
+# https://cloudinit.readthedocs.io/en/latest/topics/modules.html
+
+users:
+  - default
+  - name: ubuntu
+    gecos: Ubuntu
+    sudo: ['ALL=(ALL) NOPASSWD:ALL']
+    groups: users, adm, lxd
+    shell: /bin/bash
+    ssh_import_id: None
+    lock_passwd: true
+    ssh_authorized_keys:
+      - ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBzw6Rd0cGj akgDd6J3ezfCAIO+GvuIVztlkfu2ET7z3 ubuntu
+  - name: dev
+    no_user_group: false
+    primary_group: dev
+    groups: www-data
+    sudo: ['ALL=(ALL) NOPASSWD:ALL']
+    shell: /bin/bash
+    ssh_authorized_keys:
+      - ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBzw6Rd0cGjakgDd6J3ezfCAIO+GvuIVztlkfu2ET7z3 dev
+
+write_files:
+  - path: /root/avahi-add-names.sh
+    permissions: 0700
+    content: |
+      avahi-publish -a phpmyadmin_`hostname`.local `hostname -I` -R &
+  - path: /root/init/nobell.sh
+    content: |
+      sed -i "s/\# set bell-style none/set bell-style none/" /etc/inputrc
+      echo "blacklist pcspkr" >> /etc/modprobe.d/blacklist.conf
+      echo "set visualbell" >> /etc/vim/vimrc.local
+  - path: /root/init/users_init.sh
+    content: |
+      cat /root/init/environment >> /etc/environment
+
+      cp /root/init/.bash_functions /etc/skel/.bash_functions_
+      chmod 644 /etc/skel/.bash_functions_
+
+      cp  /root/init/.bash_aliases /etc/skel/.bash_aliases_
+      chmod 644 /etc/skel/.bash_aliases_
+
+      cp /etc/skel/.bash_functions_ /home/ubuntu/.bash_functions_
+      cp /etc/skel/.bash_aliases_ /home/ubuntu/.bash_aliases_
+      chown ubuntu:ubuntu /home/ubuntu/.bash_functions_ /home/ubuntu/.bash_aliases_
+
+      cp /etc/skel/.bash_functions_ /home/dev/.bash_functions_
+      cp /etc/skel/.bash_aliases_ /home/dev/.bash_aliases_
+      chown dev:dev /home/dev/.bash_functions_ /home/dev/.bash_aliases_
+  - path: /root/init/mysql_init.sh
+    content: |
+      chmod u+x /bin/mysqlroot.sh
+      #/root/init/.mysql_reset_root_password.sh
+      #cp /etc/mysql/mysql.conf.d/mysqld.cnf /etc/mysql/mysql.conf.d/mysqld.cnf.default
+      cp /root/init/mysqld_extra.cnf /etc/mysql/mysql.conf.d/mysqld_extra.cnf
+      chmod ugo+r /etc/mysql/mysql.conf.d/mysqld_extra.cnf
+      service mysql restart
+  - path: /root/init/php_init.sh
+    content: |
+      /root/init/.getcomposer.sh
+      touch /var/log/apache2/php_error.log
+      chown www-data:www-data /var/log/apache2/php_error.log
+      chmod 644 /var/log/apache2/php_error.log
+
+      cp /root/init/99-php.ini /etc/php/8.1/apache2/conf.d/99-php.ini
+      chown root:root /etc/php/8.1/apache2/conf.d/99-php.ini
+      chmod 644 /etc/php/8.1/apache2/conf.d/99-php.ini
+      service php8.1-fpm stop
+      service php8.1-fpm start
+      service apache2 stop
+      service apache2 start
+  - path: /root/init/99-php.ini
+    content: |
+      error_reporting=E_ALL
+      short_open_tag=Off
+      display_errors=On
+      html_errors=On
+      realpath_cache_size=6M
+      upload_max_filesize=40M
+      post_max_size=41M
+      max_execution_time=180
+      max_input_time=60
+      error_log=/var/log/apache2/php_error.log
+
+      [intl]
+      intl.default_locale=fr_FR
+      intl.use_exceptions=On
+
+      [Date]
+      date.timezone = "Europe/Paris"
+
+      [opcache]
+      #https://developpaper.com/php-opcache-configuration-optimization/
+      #https://stitcher.io/blog/php-8-jit-setup
+      opcache.enable=1
+      opcache.revalidate_freq=0
+      #opcache.validate_timestamps=0  commenté en dev
+      opcache.max_accelerated_files=7963
+      opcache.memory_consumption=192
+      opcache.interned_strings_buffer=16
+      opcache.fast_shutdown=1
+      opcache.jit_buffer_size=16M
+      opcache.jit=1255
+  - path: /root/init/mysqld_extra.cnf
+    content: |
+      [mysqld]
+      lc_messages_dir=/usr/share/mysql
+      lc_messages=fr_FR
+      #https://dev.mysql.com/doc/refman/8.0/en/charset-collation-names.html
+      #skip-grant-tables
+      #character-set-server=utf8mb4
+      #collation-server=utf8mb4_unicode_ci
+      #aria_recover_options=FORCE,BACKUP
+      #myisam_recover_options=FORCE,BACKUP
+      #query_cache_type=1
+      #key_cache_block_size=1M
+      #query_cache_limit=64M
+  - path: /root/init/environment
+    content: |
+      LANG=fr_FR.UTF-8
+      LANGUAGE=fr_FR:fr
+      LC_ALL=fr_FR.UTF-8
+  - path: /root/init/locale_fr.sh
+    content: |
+      sed -i s/^#\ fr_FR.UTF-8/fr_FR.UTF-8/g /etc/locale.gen
+      locale-gen fr_FR.UTF-8
+      localectl set-locale LANG=fr_FR.UTF-8
+  - path: /root/init/.bash_functions
+    content: |
+      function cl() {
+        DIR="$*";
+            # if no DIR given, go home
+            if [ $# -lt 1 ]; then
+                    DIR=$HOME;
+        fi;
+        builtin cd "${DIR}" && \
+        # use your preferred ls command
+            ls -F --color=auto
+      }
+  - path: /root/init/.bash_aliases
+    content: |
+      #!/bin/bash
+      # @see https://www.cyberciti.biz/tips/bash-aliases-mac-centos-linux-unix.html
+      alias dir='ls -l'
+      alias move=mv
+      alias cls=clear
+      alias where=which
+      alias xcopy='cp -R'
+      alias del=rm
+      alias md=mkdir
+      alias ..='cd ..'
+      alias h='history'
+      alias path='echo -e ${PATH//:/\\n}'
+      alias now='date +"%T"'
+      alias nowtime=now
+      alias nowdate='date +"%d-%m-%Y"'
+      alias ports='netstat -tulanp'
+      alias update='sudo apt-get update && sudo apt-get upgrade'
+      alias lt='ls --human-readable --size -1 -S --classify'
+      alias mnt="mount | awk -F' ' '{ printf \"%s\t%s\n\",\$1,\$3; }' | column -t | egrep ^/dev/ | sort"
+      alias gh='history|grep'
+      alias left='ls -t -1'
+
+      if [ -f ~/.bash_functions ]; then
+        . ~/.bash_function
+      fi
+  - path: /root/init/README
+    permissions: '0644'
+    content: |
+      Connexion mysql uniquement avec des sockets
+
+      Voir /bin/mysqlroot.sh pour exécuter une requête SQL en root
+
+      Nom d'utilisateur phpmyadmin : 'pma'
+
+      Mot de passe :
+        cat /root/init/.mysql_pma
+
+      Voir /usr/share/phpmyadmin/config.inc.php pour se connecter sans mot de passe
+        $cfg['Servers'][$i]['auth_type'] = 'config';
+
+      Pour l'import/export de requêtes SQL avec PHPMyAdmin voir /usr/share/phpmyadmin/tmp
+
+      Configuration
+        mysqld --validate-config
+        apachectl -t
+        php -i
+        php -e -c <ini>
+
+      Fichiers logs à vérifier
+        /var/log/cloud-init/cloud-init.log
+        /var/log/cloud-init/cloud-init-output.log
+
+        /var/log/syslog
+        /var/log/mysql/error.log
+        /var/log/apache2/error.log
+        /var/log/php8.1-fpm.log
+        /var/log/apache2/php_error.log
+
+  - path: /root/init/phpmyadmin_tmpdir.sh
+    content: |
+      #!/bin/bash
+      cd /usr/share/phpmyadmin/tmp
+  - path: /root/init/config.init.inc.php
+    content: |
+      <?php
+      // @see /usr/share/phpmyadmin/config.sample.inc.php
+      // @see https://docs.phpmyadmin.net/fr/latest/config.html#example-for-signon-authentication
+      declare(strict_types=1);
+
+      $sessionDuration = 60*60*24*7; // 60*60*24 = one day
+      ini_set('session.gc_maxlifetime', $sessionDuration);
+
+      $cfg['blowfish_secret'] = 'BLOWFISH_SECRET';
+      $cfg['DefaultLang'] = 'en';
+      $cfg['Lang'] = 'fr';
+      $cfg['ServerDefault'] = 1;
+      $cfg['LoginCookieValidity'] = $sessionDuration;
+      $cfg['UploadDir'] = '/usr/share/phpmyadmin/tmp';
+      $cfg['SaveDir'] = '/usr/share/phpmyadmin/tmp';
+      $i = 0;
+      $i++;
+      $cfg['Servers'][$i]['verbose'] = '';
+      $cfg['Servers'][$i]['host'] = 'localhost';
+      $cfg['Servers'][$i]['port'] = 3306;
+      $cfg['Servers'][$i]['socket'] = 'MYSQL_SOCKET';
+      $cfg['Servers'][$i]['connect_type'] = 'socket';
+      $cfg['Servers'][$i]['user'] = '';
+      $cfg['Servers'][$i]['password'] = '';
+      $cfg['Servers'][$i]['auth_type'] = 'cookie';
+      $cfg['Servers'][$i]['user'] = '';
+      $cfg['Servers'][$i]['password'] = '';
+      $cfg['Servers'][$i]['pmadb'] = 'phpmyadmin';
+      $cfg['Servers'][$i]['controluser'] = 'pma';
+      $cfg['Servers'][$i]['controlpass'] = 'CONTROL_PASSWORD';
+      $cfg['Servers'][$i]['compress'] = false;
+      $cfg['Servers'][$i]['AllowNoPassword'] = false;
+  - path: /root/init/.mysql_get_socket.sh
+    content: |
+      #!/bin/bash
+      echo "select @@socket;" | /bin/mysqlroot.sh | sed "s/@@socket//"
+  - path: /root/init/.mysql_reset_pma_password.sh
+    content: |
+      #!/bin/bash
+      if [ "$1" ]; then echo "$1" > /root/init/.mysql_pma; fi
+      if [ "$1" ]; then echo "$1" > /root/init/.mysql_pma; fi
+      if [ ! -f /root/init/.mysql_pma ]; then echo `uuid` > /root/init/.mysql_pma; fi
+      if [ $(/root/init/.mysqlgetpmapass.sh | wc -c ) -lt 7 ]; then echo `uuid` > /root/init/.mysql_pma; fi
+      if [ ! -f /root/init/.mysql_pma_sample.sql ]; then
+          echo .mysql_pma_sample.sql manquant
+          exit 1
+      fi
+      if [ ! -f /bin/mysqlroot.sh ]; then
+          echo /bin/mysqlroot.sh manquant
+          exit 1
+      fi
+      if [ ! -f /root/init/.mysqlgetpmapass.sh ]; then
+          echo /root/init/.mysqlgetpmapass.sh manquant
+          exit 1
+      fi
+      cp /root/init/.mysql_pma_sample.sql /root/init/.mysql_pma.sql
+      sed -i "s/pmapass/$(/root/init/.mysqlgetpmapass.sh)/g" /root/init/.mysql_pma.sql
+      /bin/mysqlroot.sh < /root/init/.mysql_pma.sql
+      echo Please set 'controlpass' in phpmyadmin/config.inc.php
+  - path: /root/init/.mysql_reset_root_password.sh
+    content: |
+      #!/bin/bash
+      if [ "$1" ]; then echo "$1" > /root/init/.mysql_root; fi
+      if [ ! -f /root/init/.mysql_root ]; then echo `uuid` > /root/init/.mysql_root; fi
+      if [ $(/root/init/.mysqlgetrootpass.sh | wc -c ) -lt 7 ]; then echo `uuid` > /root/init/.mysql_root; fi
+      if [ ! -f /root/init/.mysql_root_sample.sql ]; then
+          echo .mysql_root_sample.sql manquant
+          exit 1
+      fi
+      if [ ! -f /root/init/.mysqlgetrootpass.sh ]; then
+          echo /root/init/.mysqlgetrootpass.sh manquant
+          exit 1
+      fi
+      if [ ! -f /root/init/.mysqldebian.sh ]; then
+          echo /root/init/.mysqldebian.sh manquant
+          exit 1
+      fi
+      cp /root/init/.mysql_root_sample.sql /root/init/.mysql_root.sql
+      sed -i "s/rootpass/$(/root/init/.mysqlgetrootpass.sh)/g" /root/init/.mysql_root.sql
+      /root/init/.mysqldebian.sh < /root/init/.mysql_root.sql
+  - path: /root/init/.getcomposer.sh
+    content: |
+      #!/bin/bash
+      curl -sS https://getcomposer.org/installer | sudo php -- --install-dir=/usr/local/bin --filename=composer
+  - path: /root/init/apache_init.sh
+    content: |
+      #!/bin/bash
+      # @see https://tecadmin.net/install-phpmyadmin-ubuntu-20-04/
+      # @see https://docs.phpmyadmin.net/en/latest/setup.html#setup-script-on-debian-ubuntu-and-derivatives
+      # @see https://docs.phpmyadmin.net/en/latest/faq.html#faq2-9
+      # @see http://howtolamp.com/lamp/phpmyadmin/4.2/installing#manually-text-editor
+      a2enmod proxy_fcgi setenvif
+      a2enconf php8.1-fpm
+      chown -R dev:www-data /var/www
+      chmod -R o-rwx -R /var/www
+      chmod ug+rwx /var/www /var/www/html
+      echo "export HOSTNAME=\$(hostname).local" >> /etc/apache2/envvars
+      cp /root/init/hostname.conf /etc/apache2/conf-available/hostname.conf
+      chmod 644 /etc/apache2/conf-available/hostname.conf
+      a2enconf hostname
+      sudo ln -s /etc/php/8.1/apache2/conf.d/99-php.ini /etc/php/8.1/fpm/conf.d/99-php.ini
+      systemctl restart apache2
+  - path: /root/init/phpmyadmin_init.sh
+    content: |
+      #!/bin/bash
+      #see http://howtolamp.com/lamp/phpmyadmin/4.2/installing/
+      mv /root/init/phpmyadmin_tmpdir.sh /home/dev/phpmyadmin_tmpdir.sh
+      chown dev:dev /home/dev/phpmyadmin_tmpdir.sh
+      chmod 755 /home/dev/phpmyadmin_tmpdir.sh
+
+      wget -O /usr/share/phpmyadmin.zip https://files.phpmyadmin.net/phpMyAdmin/5.1.3/phpMyAdmin-5.1.3-all-languages.zip
+      unzip /usr/share/phpmyadmin.zip -d /usr/share/phpmyadmin/
+      rm /usr/share/phpmyadmin.zip
+      mv /usr/share/phpmyadmin/phpMyAdmin-5.1.3-all-languages/* /usr/share/phpmyadmin/
+      rmdir /usr/share/phpmyadmin/phpMyAdmin-5.1.3-all-languages/
+      mkdir /p /usr/share/phpmyadmin/tmp
+      chmod 770 /usr/share/phpmyadmin/tmp
+
+      cp /root/init/phpmyadmin.conf /etc/apache2/conf-available/phpmyadmin.conf
+      chmod o+r /etc/apache2/conf-available/phpmyadmin.conf
+      cp /root/init/config.init.inc.php /usr/share/phpmyadmin/config.inc.php
+
+      chown -R www-data:www-data /usr/share/phpmyadmin
+      cp /root/init/.mysql_pma_sample.sql /root/init/.pma.sql
+      echo 'DROP DATABASE IF EXISTS phpmyadmin' | /bin/mysqlroot.sh
+      /bin/mysqlroot.sh < /usr/share/phpmyadmin/sql/create_tables.sql
+      sudo /root/init/.mysql_reset_pma_password.sh
+      sed -i "s/BLOWFISH_SECRET/`uuid`/" /usr/share/phpmyadmin/config.inc.php
+      sed -i "s/CONTROL_PASSWORD/`/root/init/.mysqlgetpmapass.sh`/" /usr/share/phpmyadmin/config.inc.php
+      replace=$(printf '%q' $(echo "select @@socket;" | /bin/mysqlroot.sh | sed "s/@@socket//"))
+      replaceEscaped=$(sed 's/[&/\]/\\&/g' <<<"$replace")
+      sed -i "s/MYSQL_SOCKET/$replaceEscaped/" /usr/share/phpmyadmin/config.inc.php
+
+      # https://github.com/george-hawkins/avahi-aliases-notes
+
+      a2enconf phpmyadmin
+      systemctl reload apache2
+  - path: /root/init/.mysqlgetinitrootpass.sh
+    content: |
+      #!/bin/bash
+      grep -m 1 password /etc/mysql/debian.cnf | sed "s/password = //g"
+  - path: /root/init/.mysqldebian.sh
+    content: |
+      #!/bin/bash
+      mysql -udebian-sys-maint -p$(/root/init/.mysqlgetinitrootpass.sh)
+  - path: /root/init/.mysqlgetpmapass.sh
+    content: |
+      #!/bin/bash
+      head -n 1 -c 128 -z /root/init/.mysql_pma | xargs
+  - path: /root/init/.mysqlgetrootpass.sh
+    content: |
+      #!/bin/bash
+      head -n 1 -c 128 -z /root/init/.mysql_root | xargs
+  - path: /bin/mysqlroot.sh
+    permissions: '0700'
+    content: |
+      #!/bin/bash
+      #mysql -uroot -p`sudo /root/init/.mysqlgetrootpass.sh`
+      mysql
+  - path: /root/init/.mysql_root_sample.sql
+    content: |
+      USE mysql;
+      ALTER USER root@localhost IDENTIFIED WITH mysql_native_password;
+      ALTER USER root@localhost IDENTIFIED BY 'rootpass';
+      FLUSH PRIVILEGES;
+  - path: /root/init/avahi_init.sh
+    content: |
+      (crontab -l 2>/dev/null; echo "crontab -e @reboot /root/avahi-add-names.sh") | crontab -
+  - path: /root/init/.mysql_pma_sample.sql
+    content: |
+      DROP USER IF EXISTS 'pma'@'localhost';
+      CREATE USER 'pma'@'localhost' IDENTIFIED WITH caching_sha2_password BY 'pmapass';
+      GRANT SELECT, INSERT, UPDATE, DELETE ON phpmyadmin.* TO 'pma'@'localhost';
+      GRANT USAGE ON mysql.* TO 'pma'@'localhost';
+      GRANT CREATE ON *.* TO 'pma'@'localhost';
+      GRANT SELECT ON mysql.db TO 'pma'@'localhost';
+      /*GRANT SELECT (Host, Db, User, Table_name, Table_priv, Column_priv)
+                ON mysql.tables_priv TO 'pma'@'localhost';
+      GRANT SELECT (Host, User, Select_priv, Insert_priv, Update_priv, Delete_priv,
+                    Create_priv, Drop_priv, Reload_priv, Shutdown_priv, Process_priv,
+                    File_priv, Grant_priv, References_priv, Index_priv, Alter_priv,
+                    Show_db_priv, Super_priv, Create_tmp_table_priv, Lock_tables_priv,
+                    Execute_priv, Repl_slave_priv, Repl_client_priv)
+                 ON mysql.user TO 'pma'@'localhost';
+      */
+      CREATE USER 'phpmyadmin'@'localhost' IDENTIFIED WITH caching_sha2_password BY 'pmapass';
+      GRANT ALL PRIVILEGES ON *.* TO 'phpmyadmin'@'localhost';
+      FLUSH PRIVILEGES;
+  - path: /root/init/hostname.conf
+    content: ServerName ${HOSTNAME}.local
+  - path: /root/init/.samba_share
+    content: |
+
+      [www]
+        comment = dossier www
+        path = /var/www
+        read only = no
+        browsable = yes
+        create mask = 0640
+        directory mask = 0750
+        force user = dev
+        force group = www-data
+  - path: /root/init/samba_init.sh
+    content: |
+      cat /root/init/.samba_share >> /etc/samba/smb.conf
+      sudo service smbd restart
+      sudo ufw allow samba
+      (echo "dev"; echo "dev") | smbpasswd -s -a dev
+  - path: /root/init/phpmyadmin.conf
+    content: |
+      Alias /phpmyadmin /usr/share/phpmyadmin
+      Alias /phpMyAdmin /usr/share/phpmyadmin
+
+      <VirtualHost *:80>
+
+        ServerName phpmyadmin_${HOSTNAME}.local
+        ServerAlias www.phpmyadmin_${HOSTNAME}.local
+
+        DocumentRoot /usr/share/phpmyadmin
+
+        <Directory /usr/share/phpmyadmin/>
+          AddDefaultCharset UTF-8
+          php_flag session.upload_progress.enabled on
+          php_admin_value upload_tmp_dir /usr/share/phpmyadmin/tmp
+          php_admin_value open_basedir /usr/share/phpmyadmin/:/usr/share/doc/phpmyadmin/:/etc/phpmyadmin/:/var/lib/phpmyadmin/:/usr/share/php/:/usr/share/javascript/
+
+          <IfModule mod_authz_core.c>
+              <RequireAny>
+              Require all granted
+            </RequireAny>
+          </IfModule>
+        </Directory>
+
+        <Directory /usr/share/phpmyadmin/setup/>
+          <IfModule mod_authz_core.c>
+            <RequireAny>
+              Require all granted
+            </RequireAny>
+          </IfModule>
+        </Directory>
+
+        <Directory /usr/share/phpmyadmin/setup/lib>
+          Require all denied
+        </Directory>
+
+        <Directory /usr/share/phpmyadmin/libraries>
+          Require all denied
+        </Directory>
+
+        <Directory /usr/share/phpmyadmin/templates>
+          Require all denied
+        </Directory>
+      </VirtualHost>
+
+apt_sources:
+  - source: 'ppa:ondrej/php'
+  - source: 'ppa:ondrej/apache2'
+  - source: 'ppa:phpmyadmin/ppa'
+
+apt_update: true
+apt_upgrade: true
+package_update: true
+package_upgrade: true
+
+packages:
+  - avahi-daemon
+  - avahi-utils
+  - uuid
+  - pwgen
+  - ca-certificates
+  - apt-transport-https
+  - software-properties-common
+  - mysql-server
+  - zip
+  - apache2
+  - php8.1
+  - libapache2-mod-php8.1
+  - libapache2-mod-fcgid
+  - php8.1-mysql
+  - php8.1-bcmath
+  - php8.1-xml
+  - php8.1-fpm
+  - php8.1-zip
+  - php8.1-intl
+  - php8.1-gd
+  - php8.1-cli
+  - php8.1-mbstring
+  - php8.1-opcache
+  - net-tools
+  - language-pack-fr
+  - manpages-fr
+  - manpages-fr-dev
+  - manpages-fr-extra
+  - samba
+
+locale: fr_FR
+
+runcmd:
+  - sudo chmod -R o-rwx /root/init/
+  - sudo chmod ug+x /root/init/*.sh /root/init/.*.sh
+  - sudo /root/init/avahi_init.sh
+  - sudo /root/init/users_init.sh
+  - sudo /root/init/mysql_init.sh
+  - sudo /root/init/php_init.sh
+  - sudo /root/init/apache_init.sh
+  - sudo /root/init/phpmyadmin_init.sh
+  - sudo /root/init/locale_fr.sh
+  - sudo /root/init/samba_init.sh
+  - sudo /root/init/nobell.sh
+
+final_message: |
+  Voir /root/init/README
