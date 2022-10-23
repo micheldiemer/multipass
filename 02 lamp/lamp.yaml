@@ -25,10 +25,6 @@ users:
       - ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBzw6Rd0cGjakgDd6J3ezfCAIO+GvuIVztlkfu2ET7z3 dev
 
 write_files:
-  - path: /root/avahi-add-names.sh
-    permissions: 0700
-    content: |
-      avahi-publish -a phpmyadmin_`hostname`.local `hostname -I` -R &
   - path: /root/init/nobell.sh
     content: |
       sed -i "s/\# set bell-style none/set bell-style none/" /etc/inputrc
@@ -340,8 +336,6 @@ write_files:
       replaceEscaped=$(sed 's/[&/\]/\\&/g' <<<"$replace")
       sed -i "s/MYSQL_SOCKET/$replaceEscaped/" /usr/share/phpmyadmin/config.inc.php
 
-      # https://github.com/george-hawkins/avahi-aliases-notes
-
       a2enconf phpmyadmin
       systemctl reload apache2
   - path: /root/init/.mysqlgetinitrootpass.sh
@@ -372,9 +366,6 @@ write_files:
       ALTER USER root@localhost IDENTIFIED WITH mysql_native_password;
       ALTER USER root@localhost IDENTIFIED BY 'rootpass';
       FLUSH PRIVILEGES;
-  - path: /root/init/avahi_init.sh
-    content: |
-      (crontab -l 2>/dev/null; echo "crontab -e @reboot /root/avahi-add-names.sh") | crontab -
   - path: /root/init/.mysql_pma_sample.sql
     content: |
       DROP USER IF EXISTS 'pma'@'localhost';
@@ -472,8 +463,6 @@ package_update: true
 package_upgrade: true
 
 packages:
-  - avahi-daemon
-  - avahi-utils
   - uuid
   - pwgen
   - ca-certificates
@@ -500,21 +489,18 @@ packages:
   - manpages-fr
   - manpages-fr-dev
   - manpages-fr-extra
-  - samba
 
 locale: fr_FR
 
 runcmd:
   - sudo chmod -R o-rwx /root/init/
   - sudo chmod ug+x /root/init/*.sh /root/init/.*.sh
-  - sudo /root/init/avahi_init.sh
   - sudo /root/init/users_init.sh
   - sudo /root/init/mysql_init.sh
   - sudo /root/init/php_init.sh
   - sudo /root/init/apache_init.sh
   - sudo /root/init/phpmyadmin_init.sh
   - sudo /root/init/locale_fr.sh
-  - sudo /root/init/samba_init.sh
   - sudo /root/init/nobell.sh
 
 final_message: |
