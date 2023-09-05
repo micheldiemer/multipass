@@ -1,0 +1,153 @@
+#cloud-config
+
+# https://www.tecmint.com/list-php-modules-in-linux/
+# https://cloudinit.readthedocs.io/en/latest/topics/examples.html
+# https://cloudinit.readthedocs.io/en/latest/topics/modules.html
+
+users:
+  - default
+  - name: ubuntu
+    gecos: Ubuntu
+    primary_group: ubuntu
+    sudo: ALL=(ALL) NOPASSWD:ALL
+    lock_passwd: true
+    groups: users, adm, lxd
+    shell: /bin/bash
+    ssh_authorized_keys:
+      - ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIItYttIeFcLZQIz3VwGPgR0AjGasuFz+5eBORSRtvWRV ubuntu@dev
+write_files:
+  - path: /root/init/90forceyes
+    content: |
+      APT::Get::Assume-Yes "true";
+      APT::Get::force-yes "true";
+      # DPkg::options { "--force-confdef"; };
+  - path: /root/init/nobell.sh
+    content: |
+      sed -i "s/\# set bell-style none/set bell-style none/" /etc/inputrc
+      echo "blacklist pcspkr" >> /etc/modprobe.d/blacklist.conf
+      echo "set visualbell" >> /etc/vim/vimrc.local
+  - path: /root/init/users_init.sh
+    content: |
+      #cat /root/init/environment >> /etc/environment
+
+      cp /root/.bash_functions /etc/skel/.bash_functions
+      chmod 644 /etc/skel/.bash_functions
+
+      cp  /root/.bash_aliases /etc/skel/.bash_aliases
+      chmod 644 /etc/skel/.bash_aliases
+
+      cp /etc/skel/.bash_functions /home/ubuntu/.bash_functions
+      cp /etc/skel/.bash_aliases /home/ubuntu/.bash_aliases
+      chown ubuntu:ubuntu /home/ubuntu/.bash_functions /home/ubuntu/.bash_aliases
+
+  - path: /root/init/environment
+    content: |
+      LANG=fr_FR.UTF-8
+      LANGUAGE=fr_FR:fr
+      LC_ALL=fr_FR.UTF-8
+  - path: /root/init/locale_fr.sh
+    content: |
+      sed -i s/^#\ fr_FR.UTF-8/fr_FR.UTF-8/g /etc/locale.gen
+      locale-gen fr_FR.UTF-8
+      localectl set-locale LANG=fr_FR.UTF-8
+  - path: /root/.bash_functions
+    content: |
+      function cl() {
+        DIR="$*";
+            # if no DIR given, go home
+            if [ $# -lt 1 ]; then
+                    DIR=$HOME;
+        fi;
+        builtin cd "${DIR}" && \
+        # use your preferred ls command
+            ls -F --color=auto
+      }
+  - path: /root/.bash_aliases
+    content: |
+      #!/bin/bash
+      # @see https://www.cyberciti.biz/tips/bash-aliases-mac-centos-linux-unix.html
+      alias dir='ls -l'
+      alias move=mv
+      alias cls=clear
+      alias where=which
+      alias xcopy='cp -R'
+      alias del=rm
+      alias md=mkdir
+      alias ..='cd ..'
+      alias h='history'
+      alias path='echo -e ${PATH//:/\\n}'
+      alias now='date +"%T"'
+      alias nowtime=now
+      alias nowdate='date +"%d-%m-%Y"'
+      alias ports='netstat -tulanp'
+      alias update='sudo apt-get update && sudo apt-get upgrade'
+      alias lt='ls --human-readable --size -1 -S --classify'
+      alias mnt="mount | awk -F' ' '{ printf \"%s\t%s\n\",\$1,\$3; }' | column -t | egrep ^/dev/ | sort"
+      alias gh='history|grep'
+      alias left='ls -t -1'
+
+      if [ -f ~/.bash_functions ]; then
+        . ~/.bash_functions
+      fi
+  - path: /root/init/README
+    content: |
+
+      Fichiers logs à vérifier
+        /var/log/cloud-init/cloud-init.log
+        /var/log/cloud-init/cloud-init-output.log
+
+        /var/log/syslog
+  - path: /root/pubkey.conf
+    content: |
+      PubkeyAuthentication yes
+      PubkeyAcceptedKeyTypes ecdsa-sha2-nistp256-cert-v01@openssh.com,ecdsa-sha2-nistp384-cert-v01@openssh.com,ecdsa-sha2-nistp521-cert-v01@openssh.com,ssh-ed25519-cert-v01@openssh.com,rsa-sha2-512-cert-v01@openssh.com,rsa-sha2-256-cert-v01@openssh.com,ssh-rsa-cert-v01@openssh.com,ecdsa-sha2-nistp256,ecdsa-sha2-nistp384,ecdsa-sha2-nistp521,ssh-ed25519,rsa-sha2-512,rsa-sha2-256,ssh-rsa
+  - path: /root/sshd.sh
+    content: |
+      cp /root/pubkey.conf /etc/ssh/sshd_config.d/
+      service ssh restart
+
+apt:
+  conf: |
+    APT {
+        Get {
+            Assume-Yes 'true';
+            Fix-Broken 'true';
+        }
+    }
+  sources:
+    php:
+      source: 'ppa:ondrej/php'
+    apache2:
+      source: 'ppa:ondrej/apache2'
+
+package_update: true
+package_upgrade: true
+package_reboot_if_required: true
+
+packages:
+  - acl
+  - uuid
+  - pwgen
+  - ca-certificates
+  - apt-transport-https
+  - software-properties-common
+  - zip
+  - language-pack-fr
+  - manpages-fr
+  - manpages-fr-dev
+  - manpages-fr-extra
+  - net-tools
+
+locale: fr_FR.UTF-8
+
+runcmd:
+  - sudo chmod -R o-rwx /root/init/
+  - sudo chmod ug+x /root/init/*.sh /root/init/.*.sh
+  - sudo /root/init/users_init.sh
+  - sudo /root/init/locale_fr.sh
+  - sudo /root/init/sshd.sh
+  - sudo /root/init/nobell.sh
+  - sudo cp /root/init/90forceyes /etc/apt/apt.conf.d/
+
+final_message: |
+  Voir /root/init/README
