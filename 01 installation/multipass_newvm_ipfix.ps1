@@ -40,7 +40,7 @@ Function Global:New-MultipassVMIPFixe
     vmName          : nom de la vm
     vmIP            : adresse IP fixe de la VM
     submaskCidrBits : nombre de bits notation CIDR (default=24)
-    switchName      : nom du switch virtuel existant ou à créer (default=multipass)
+    switchName      : nom du switch virtuel existant ou à créer (default=staticip)
     switchIp        : adresse IP du switch virtuel existant ou à créer (default=192.168.10.254)
     launchArgs      : paramètres envoyés à multipass launch
     .EXAMPLE
@@ -55,7 +55,7 @@ Function Global:New-MultipassVMIPFixe
         [Parameter(Mandatory,HelpMessage='Adresse IP de la VM : ')]
         [IPAddress]$vmIP,
         [Int]$submaskCidrBits=24,
-        [String]$switchName="multipass",
+        [String]$switchName="staticip",
         [IPAddress]$switchIp="192.168.10.254",
         [String]$launchArgs=""
     )
@@ -80,12 +80,12 @@ Function Global:New-MultipassVMIPFixe
     #    Récupération du numéro d'interface
     If ( ! ( Get-VMSwitch | Where-Object {$_.Name -eq $switchName} ) ) {
         New-VMSwitch -SwitchName $switchName -SwitchType Internal
-        $netadapter=Get-NetAdapter | Where-Object Name -Like "*multipass*"
+        $netadapter=Get-NetAdapter | Where-Object Name -Like "*$switchName*"
         New-NetIPAddress -PrefixLength $submaskCidrBits -InterfaceIndex $netadapter.ifIndex -IPAddress $switchIp
         #Get-NetIPAddress | Where-Object InterfaceIndex -eq $netadapter.ifIndex
     }
 
-    If ( Get-VM  | Where-Object { $_.Name -eq $vmName } ) {
+    If ( Get-VM | Where-Object { $_.Name -eq $vmName } ) {
         Write-Error "La VM $vmName existe déjà."
         Return
     }
@@ -144,8 +144,10 @@ Function Global:New-MultipassVMIPFixe
     Remove-Item "$tempNetplanFile"
 
     # Application des paramètres
-    multipass exec $vmName -- sh -c "sudo netplan --debug generate"
-    multipass exec $vmName sudo netplan try
+    multipass exec $vmName -- sh -c "sudo chmod 600 /etc/netplan/*"
+    multipass exec $vmName -- sh -c "sudo chown root:root /etc/netplan/*"
+    #multipass exec $vmName -- sh -c "sudo netplan --debug generate"
+    #multipass exec $vmName sudo netplan try
     multipass exec $vmName sudo netplan apply
     }
 }

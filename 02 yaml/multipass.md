@@ -36,6 +36,7 @@ Supprimer ce raccourci : `multipass set client.gui.hotkey=""`
 - `multipass purge` : supprimer définitivement une VM
 - `multipass launch --name <nom>`  : créer une VM
 - `multipass launch --name <nom> --cloud-init <FICHIER>`  : créer une VM avec fichier de configuration cloud-init
+- `multipass get local.driver` : vérfie le gestionnaire de virutalisation de multipass
 
 ## Exemple : création / lancement / arrêt et suppression d'une machine virtuelle
 
@@ -54,10 +55,15 @@ Supprimer ce raccourci : `multipass set client.gui.hotkey=""`
 2. `multipass list`
 3. `multipass shell dev`
 
-## Partage de fichiers
+## Partage de fichiers`
 
-Utiliser `sftp` de préférence
-Autres solutions possibles **à éviter** : `multipass mount` ; `samba`
+
+- `multipass mount`
+- `multipass mount -t native`
+- `sftp / sshfs`
+- `nfs`
+- `samba`
+
 
 ## Se connecter en ssh
 
@@ -94,6 +100,28 @@ sudo service sshd restart
 
 # tester
 ssh ubuntu@dev.mshome.net -i ~/.ssh/id_ed25519
+```
+
+## Donner les droits à l'utilisateur ubuntu
+
+```bash
+multipass shell dev
+# changement de proproétaire pour /var/www/html
+sudo chown -R www-data:www-data /var/www/html/
+# ajouter l'utilisateur ubuntu au groupe www-data
+sudo usermod -a -G www-data ubuntu
+# autoriser tous les utilisateurs du groupe www-data à modifier les fichiers
+sudo chmod g+w /var/www/html/
+# les fichiers créés dans /var/www/html appartiendront au groupe www-data
+sudo chmod g+s /var/www/html/
+
+# redémarrer la machine
+exit
+multipass restart dev
+multipass shell dev
+# renommer ou supprimer le fichier index.html par défaut
+# mv /var/www/html/index.html /var/www/html/_index.html
+rm /var/www/html/index.html
 ```
 
 ## Se connecter en sftp avec VSCode
@@ -175,7 +203,7 @@ Add-VMNetworkAdapter -VMname $vmName -SwitchName $switchName -StaticMacAddress $
 
 Fichier yaml - netplan
 
-```yaml
+````yaml
 # /etc/netplan/60-staticip.yaml
 # bien vérifier le paramètre macaddress
 network:
@@ -207,7 +235,7 @@ if ( Test-Path -Path 'C:\Windows\System32\drivers\etc\hosts.ics' -PathType Leaf 
 }
 Get-HNSNetwork | Where-Object Name -Like "Default Switch" |      Remove-HNSNetwork
 Restart-Computer
-```
+````
 
 - Dans la palette de commandes (Ctrl Shift P), voir et tester les commandes disponibles : `SFTP:`
 

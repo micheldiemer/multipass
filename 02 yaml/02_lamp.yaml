@@ -4,14 +4,13 @@
 # https://cloudinit.readthedocs.io/en/latest/topics/examples.html
 # https://cloudinit.readthedocs.io/en/latest/topics/modules.html
 
-
 #network:
 #  version: 2
 #  ethernets:
 #    eth0:
 #      dhcp4: true
-      # match:
-      #  macaddress: 52:54:00:b1:be:fb
+# match:
+#  macaddress: 52:54:00:b1:be:fb
 #      set-name: eth0
 #    eth1:
 #      dhcp4: false
@@ -49,6 +48,7 @@ write_files:
       [[ ! -f "$SCRIPT_DIR/skillandyou_wp.conf" ]] && echo skillandyou_wp.conf manquant && exit 1
       [[ ! -f "$SCRIPT_DIR/skillandyou_wp_empty.sql" ]] && echo skillandyou_wp.conf manquant && exit 1
 
+      [[ -d /var/www/skillandyou_wp/wordpress ]] && rm -fR /var/www/skillandyou_wp/wordpress
       mkdir -p /var/www/skillandyou_wp/wordpress
       sudo cp "$SCRIPT_DIR/skillandyou_wp.conf" /etc/apache2/sites-available/skillandyou_wp.conf
       sudo mysql < "$SCRIPT_DIR/skillandyou_wp_empty.sql"
@@ -62,13 +62,26 @@ write_files:
               rm /var/www/skillandyou_wp/wp.zip
       else
               echo "extration de la sauvegarde"
-              [[ ! -f "$SCRIPT_DIR/skillandyou_wp.tgz" ]] && echo 'problème skillandyou_wp.tgz' && exit 1
+              [[ ! -f "$SCRIPT_DIR/skillandyou_wp.tgz" ]] && echo 'problème skillandyou_wp.tgz : essayez' $0 'new' && exit 1
               mysql --database=skillandyou_wp -u root < skillandyou_wp.sql
               cd /var/www/skillandyou_wp/
               tar xvzf "$SCRIPT_DIR/skillandyou_wp.tgz"
       fi
       sudo a2ensite skillandyou_wp
       sudo systemctl reload apache2
+  - path: /root/init/newwp/skillandyou_wp7.4.conf
+    content: |
+      <VirtualHost *:80>
+        ServerAdmin webmaster@localhost
+        ServerName skillandyou_wp.lan
+        DocumentRoot /var/www/skillandyou_wp/wordpress
+        <Directory /var/www/skillandyou_wp/wordpress>
+          AllowOverride All
+        </Directory>
+        Include /etc/apache2/conf-available/php7.4-fpm.conf
+        ErrorLog ${APACHE_LOG_DIR}/error.log
+        CustomLog ${APACHE_LOG_DIR}/access.log combined
+      </VirtualHost>
   - path: /root/init/newwp/skillandyou_wp.conf
     content: |
       <VirtualHost *:80>
@@ -86,6 +99,7 @@ write_files:
   - path: /root/init/newwp/skillandyou_wp_empty.sql
     content: |
       DROP DATABASE IF EXISTS `skillandyou_wp`;
+      CREATE USER IF NOT EXISTS operations@localhost IDENTIFIED BY 'operations';
       CREATE DATABASE `skillandyou_wp` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_520_ci;
       GRANT ALL PRIVILEGES ON `skillandyou_wp`.* TO operations@localhost;
       FLUSH PRIVILEGES;
@@ -130,6 +144,7 @@ write_files:
         exit
       fi
       echo "CREATE USER IF NOT EXISTS operations@localhost IDENTIFIED BY 'operations';" | sudo mysql
+      echo "DROP DATABASE IF EXISTS \`$1\`;" | sudo mysql
       echo "CREATE DATABASE IF NOT EXISTS \`$1\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_520_ci;" | sudo mysql
       echo "GRANT ALL PRIVILEGES ON \`$1\`.* TO operations@localhost;" | sudo mysql
       echo "FLUSH PRIVILEGES;" | sudo mysql
@@ -139,6 +154,8 @@ write_files:
                       sed -i "s/utf8mb4_0900_ai_ci/utf8mb4_unicode_520_ci/g" "$2"
                       mysql -u operations -poperations "$1" < "$2"
                       echo Fichier $2 importé.
+              else
+                      echo Fichier $2 inexistant.
               fi
       fi
   - path: /root/init/90forceyes
@@ -164,20 +181,19 @@ write_files:
       cp /etc/skel/.bash_functions /home/ubuntu/.bash_functions
       cp /etc/skel/.bash_aliases /home/ubuntu/.bash_aliases
       chown ubuntu:ubuntu /home/ubuntu/.bash_functions /home/ubuntu/.bash_aliases
-      mkdir /home/ubuntu/bin
-      cp /root/init/newdb.sh /home/ubuntu/bin/newdb.sh
-      cp /root/init/drop_databases.sh /home/ubuntu/bin/drop_databases.sh
-      cp /root/init/drop_databases.sql /home/ubuntu/bin/drop_databases.sql
-      cp -R /root/init/newwp /home/ubuntu/bin
-      chown -R ubuntu:ubuntu /home/ubuntu/bin
+      # mkdir /home/ubuntu/bin
+      # cp /root/init/newdb.sh /home/ubuntu/bin/newdb.sh
+      # cp /root/init/drop_databases.sh /home/ubuntu/bin/drop_databases.sh
+      # cp /root/init/drop_databases.sql /home/ubuntu/bin/drop_databases.sql
+      # cp -R /root/init/newwp /home/ubuntu/bi
+      # ls -s /home/ubuntu/bin/newwp/skillandyou_wp8.conf /home/ubuntu/bin/newwp/skillandyou_wp.conf
+      # chown -R ubuntu:ubuntu /home/ubuntu/bin
 
   - path: /root/init/mysql_init.sh
     content: |
-      cp /root/init/70-french.cnf /etc/mysql/mariadb.conf.d/70-french.cnf
-      cp /root/init/80-dev.cnf /etc/mysql/mariadb.conf.d/80-dev.cnf
-      chmod ugo+r /etc/mysql/mariadb.conf.d/70-french.cnf
+      cp /root/init/70-dev.cnf /etc/mysql/mariadb.conf.d/70-dev.cnf
       chmod ugo+r /etc/mysql/mariadb.conf.d/80-dev.cnf
-      echo "CREATE USER IF NOT EXISTS operations IDENTIFIED BY 'operations';" | sudo mysql
+      echo "CREATE USER IF NOT EXISTS operations@localhost IDENTIFIED BY 'operations';" | sudo mysql
       echo "GRANT ALL PRIVILEGES ON *.* TO 'operations'@'localhost' WITH GRANT OPTION;" | sudo mysql
       echo "ALTER USER 'root'@'localhost' IDENTIFIED  BY '';" | sudo mysql
       service mysql restart
@@ -186,12 +202,23 @@ write_files:
     content: |
       /root/init/getcomposer.sh
       touch /var/log/apache2/php_error.log
-      chown www-data:www-data /var/log/apache2/php_error.log
+      chown ubuntu:www-data /var/log/apache2/php_error.log
       chmod 664 /var/log/apache2/php_error.log
 
       cp /root/init/99-php.ini /etc/php/99-php.ini
       chown ubuntu:www-data /etc/php/99-php.ini
       chmod 644 /etc/php/99-php.ini
+
+      cp /etc/php/99-php.ini /etc/php/8.3/99-php.ini
+      ln -s /etc/php/8.3/99-php.ini /etc/php/8.3/fpm/conf.d/99-php.ini
+      service php8.3-fpm stop
+      service php8.3-fpm start
+
+
+      cp /etc/php/99-php.ini /etc/php/8.2/99-php.ini
+      ln -s /etc/php/8.2/99-php.ini /etc/php/8.2/fpm/conf.d/99-php.ini
+      service php8.2-fpm stop
+      service php8.2-fpm start
 
       cp /etc/php/99-php.ini /etc/php/8.1/99-php.ini
       ln -s /etc/php/8.1/99-php.ini /etc/php/8.1/fpm/conf.d/99-php.ini
@@ -248,9 +275,11 @@ write_files:
       opcache.fast_shutdown=1
       opcache.jit_buffer_size=16M
       opcache.jit=1255
-  - path: /root/init/70-french.cnf
+  - path: /root/init/70-dev.cnf
     content: |
       [mysqld]
+      #lower_case_table_names=1
+      bind-address = 0.0.0.0
       lc_messages_dir=/usr/share/mysql
       lc_messages=fr_FR
       #https://dev.mysql.com/doc/refman/8.0/en/charset-collation-names.html
@@ -262,10 +291,6 @@ write_files:
       #query_cache_type=1
       #key_cache_block_size=1M
       #query_cache_limit=64M
-  - path: /root/init/80-dev.cnf
-    content: |
-      [mysqld]
-      bind-address = 0.0.0.0
   - path: /root/init/environment
     content: |
       LANG=fr_FR.UTF-8
@@ -347,13 +372,17 @@ write_files:
       #!/bin/bash
       # @see http://howtolamp.com/lamp/phpmyadmin/4.2/installing#manually-text-editor
       systemctl stop apache2
-      sed -i s/www-data/ubuntu/g /etc/apache2/envvars
-      sed -i s/www-data/ubuntu/g /etc/apache2/envvars
-      sed -i s/www-data/ubuntu/g /etc/php/8.1/fpm/pool.d/www.conf
-      sed -i s/www-data/ubuntu/g /etc/php/7.4/fpm/pool.d/www.conf
+      # sed -i s/www-data/ubuntu/g /etc/apache2/envvars
+      # sed -i s/www-data/ubuntu/g /etc/apache2/envvars
+      # sed -i s/www-data/ubuntu/g /etc/php/8.3/fpm/pool.d/www.conf
+      # sed -i s/www-data/ubuntu/g /etc/php/8.2/fpm/pool.d/www.conf
+      # sed -i s/www-data/ubuntu/g /etc/php/8.1/fpm/pool.d/www.conf
+      # sed -i s/www-data/ubuntu/g /etc/php/7.4/fpm/pool.d/www.conf
       a2enmod setenvif rewrite actions fcgid alias proxy_fcgi
       #a2enconf php7.4-fpm
       a2enconf php8.1-fpm
+      #a2enconf php8.2-fpm
+      #a2enconf php8.3-fpm
       chown -R ubuntu:ubuntu /var/www
       chmod -R o-rwx -R /var/www
       chmod ug+rwx /var/www /var/www/html
@@ -364,15 +393,29 @@ write_files:
       chmod 644 /etc/apache2/conf-available/php7.4.conf
       a2enconf hostname
       #a2enconf php7.4
+      sudo ln -s /etc/php/8.3/apache2/conf.d/99-php.ini /etc/php/8.3/fpm/conf.d/99-php.ini
+      sudo ln -s /etc/php/8.2/apache2/conf.d/99-php.ini /etc/php/8.2/fpm/conf.d/99-php.ini
       sudo ln -s /etc/php/8.1/apache2/conf.d/99-php.ini /etc/php/8.1/fpm/conf.d/99-php.ini
       sudo ln -s /etc/php/7.4/apache2/conf.d/99-php.ini /etc/php/7.4/fpm/conf.d/99-php.ini
       chmod 2750 /var/www /var/www/html
-      setfacl -Rdm g:www-data:rx /var/www
-      systemctl restart php8.1-fpm
-      systemctl restart php7.4-fpm
-      sudo a2dismod php7.4
 
-      systemctl start apache2
+
+      # Ajout de l'utilisateur ubuntu au groupe www-data
+      sudo usermod -a -G www-data ubuntu
+      # Changement de propriétaire du dossier /var/www
+      sudo chown -R ubuntu:www-data /var/www
+      # Tous les fichiers créés dans /var/www appartiendront au groupe www-data
+      sudo chmod -R g+s /var/www/
+      # Les autres n'ont aucun droit sur /var/www
+      sudo chmod -R o-rwx /var/www/
+
+      sudo a2enmod proxy proxy_fcgi
+
+      systemctl restart php8.1-fpm
+      #systemctl restart php7.4-fpm
+      #sudo a2dismod php7.4
+
+      sudo systemctl restart apache2
   - path: /root/init/php7.4.conf
     content: |
       <Directory /var/www/html/php7.4>
@@ -391,11 +434,11 @@ write_files:
       service ssh restart
   - path: /root/init/.gitignore_global
     content: /
-        *~
-        .*.swp
-        .DS_Store
-        desktop.ini
-        *.tmp
+      *~
+      .*.swp
+      .DS_Store
+      desktop.ini
+      *.tmp
   - path: /root/init/git.sh
     content: |
       #!/bin/bash
@@ -412,85 +455,106 @@ write_files:
       sudo -u ubuntu git config --global core.ignoreCase false
 
 apt:
-  conf: |
-    APT {
-        Get {
-            Assume-Yes 'true';
-            Fix-Broken 'true';
-        }
-    }
+  # conf: |
+  #   APT {
+  #       Get {
+  #           Assume-Yes 'true';
+  #           Fix-Broken 'true';
+  #       }
+  #   }
   sources:
     php:
-      source: 'ppa:ondrej/php'
+      source: "ppa:ondrej/php"
     apache2:
-      source: 'ppa:ondrej/apache2'
+      source: "ppa:ondrej/apache2"
 
 package_update: true
 package_upgrade: true
 package_reboot_if_required: true
 
 packages:
-  - acl
-  - uuid
-  - pwgen
-  - ca-certificates
+  - apache2
   - apt-transport-https
-  - software-properties-common
-  - zip
+  - ca-certificates
   - language-pack-fr
+  - libapache2-mod-fcgid
+  - libapache2-mod-php7.4
+  - libapache2-mod-php8.1
+  - libapache2-mod-php8.2
+  - libapache2-mod-php8.3
   - manpages-fr
   - manpages-fr-dev
   - manpages-fr-extra
-  - net-tools
   - mariadb-server
-  - apache2
-  - libapache2-mod-fcgid
-  - php8.1
-  - php8.1-fpm
-  - libapache2-mod-php8.1
-  - php8.1-mysql
-  - php8.1-bcmath
-  - php8.1-xml
-  - php8.1-zip
-  - php8.1-intl
-  - php8.1-gd
-  - php8.1-cli
-  - php8.1-curl
-  - php8.1-mbstring
-  - php8.1-opcache
+  - net-tools
+  - p7zip
+  - p7zip-full
+  - p7zip-rar
   - php7.4
-  - php7.4-fpm
-  - libapache2-mod-php7.4
-  - php7.4-mysql
   - php7.4-bcmath
+  - php7.4-cli
+  - php7.4-curl
+  - php7.4-fpm
+  - php7.4-gd
+  - php7.4-intl
+  - php7.4-mbstring
+  - php7.4-mysql
+  - php7.4-opcache
   - php7.4-xml
   - php7.4-zip
-  - php7.4-curl
-  - php7.4-intl
-  - php7.4-gd
-  - php7.4-cli
-  - php7.4-mbstring
-  - php7.4-opcache
-  - language-pack-fr
-  - manpages-fr
-  - manpages-fr-dev
-  - manpages-fr-extra
+  - php8.1
+  - php8.1-bcmath
+  - php8.1-cli
+  - php8.1-curl
+  - php8.1-gd
+  - php8.1-intl
+  - php8.1-mbstring
+  - php8.1-mysql
+  - php8.1-opcache
+  - php8.1-xml
+  - php8.1-zip
+  - php8.2
+  - php8.2-bcmath
+  - php8.2-cli
+  - php8.2-curl
+  - php8.2-gd
+  - php8.2-intl
+  - php8.2-mbstring
+  - php8.2-mysql
+  - php8.2-opcache
+  - php8.2-xml
+  - php8.2-zip
+  - php8.3
+  - php8.3-bcmath
+  - php8.3-cli
+  - php8.3-curl
+  - php8.3-gd
+  - php8.3-intl
+  - php8.3-mbstring
+  - php8.3-mysql
+  - php8.3-opcache
+  - php8.3-xml
+  - php8.3-zip
+  - pwgen
+  - software-properties-common
+  - unzip
+  - uuid
+  - zip
 
 locale: fr_FR.UTF-8
 
 runcmd:
   - sudo chmod -R o-rwx /root/init/
   - sudo chmod ug+x /root/init/*.sh /root/init/.*.sh
-  - sudo /root/init/users_init.sh
+  # - sudo /root/init/users_init.sh
   - sudo /root/init/mysql_init.sh
   - sudo /root/init/php_init.sh
   - sudo /root/init/apache_init.sh
   - sudo /root/init/locale_fr.sh
-  - sudo /root/init/sshd.sh
-  - sudo /root/init/nobell.sh
+  # - sudo /root/init/nobell.sh
   # - sudo cp /root/init/90forceyes /etc/apt/apt.conf.d/
   - sudo /root/init/getcomposer.sh
-  - sudo /root/init/git.sh
+  # - sudo /root/init/git.sh
 
 final_message: |
   Voir /root/init/README
