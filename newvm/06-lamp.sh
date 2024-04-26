@@ -2,6 +2,10 @@
 export DEBIAN_FRONTEND=noninteractive
 apt -y install apache2 mariadb-server
 
+a2dismod mpm_prefork mpm_worker
+a2enmod mpm_event
+
+
 ## /var/www
 # Ajout de l'utilisateur ubuntu au groupe www-data
 sudo usermod -a -G www-data ubuntu
@@ -24,8 +28,9 @@ a2enconf hostname
 apt -y install php8.3 php8.3-bcmath php8.3-cli php8.3-curl php8.3-gd php8.3-intl php8.3-mbstring php8.3-mysql php8.3-opcache php8.3-xml php8.3-zip
 
 # apache php8.3
-apt -y install libapache2-mod-php8.3 php8.3-fpm
-a2enmod setenvif rewrite actions fcgid alias proxy proxy_fcgi
+# libapache2-mod-php8.3
+apt -y install  php8.3-fpm
+a2enmod rewrite proxy proxy_fcgi
 a2enconf php8.3-fpm
 
 # php.ini
