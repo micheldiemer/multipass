@@ -1,6 +1,6 @@
 multipass transfer "%~dp0.bash_aliases" dev:/home/ubuntu/.bash_aliases
 multipass transfer "%~dp0.bash_functions" dev:/home/ubuntu/.bash_functions
-multipass exec dev sudo chmod 770 /home/ubuntu/.bash_aliases /home/ubuntu/.bash_functions
+multipass exec dev sudo chmod 640 /home/ubuntu/.bash_aliases /home/ubuntu/.bash_functions
 
 @REM multipass exec dev sudo mkdir /etc/skel
 

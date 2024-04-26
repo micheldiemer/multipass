@@ -23,7 +23,3 @@ alias left='ls -t -1'
 if [ -f ~/.bash_functions ]; then
   . ~/.bash_functions
 fi
-
-if [ -d "$HOME/bin" ] ; then
-    PATH="$HOME/bin:$PATH"
-fi

@@ -7,6 +7,7 @@ chown -R root:root $(mkcert -CAROOT)
 chmod -R 700 $(mkcert -CAROOT)
 mkcert -install
 
+sudo systemctl stop apache2
 a2enmod ssl socache_shmcb rewrite headers
 a2dismod mpm_prefork mpm_worker
 a2enmod http2 proxy_http2 mpm_event
@@ -17,7 +18,7 @@ chown www-data:www-data /etc/apache2/ssl
 ln -s $(mkcert -CAROOT)/rootCA.pem /etc/apache2/ssl/rootCA.pem
 ln -s $(mkcert -CAROOT)/rootCA-key.pem /etc/apache2/ssl/rootCA-key.pem
 
-sudo systemctl restart apache2
+sudo systemctl start apache2
 
 
 # Protocols h2

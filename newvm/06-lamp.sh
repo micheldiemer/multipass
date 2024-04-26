@@ -2,8 +2,7 @@
 export DEBIAN_FRONTEND=noninteractive
 apt -y install apache2 mariadb-server
 
-a2dismod mpm_prefork mpm_worker
-a2enmod mpm_event
+
 
 
 ## /var/www
@@ -30,8 +29,13 @@ apt -y install php8.3 php8.3-bcmath php8.3-cli php8.3-curl php8.3-gd php8.3-intl
 # apache php8.3
 # libapache2-mod-php8.3
 apt -y install  php8.3-fpm
-a2enmod rewrite proxy proxy_fcgi
+a2enmod rewrite proxy proxy_fcgi setenvif
 a2enconf php8.3-fpm
+
+systemctl stop apache2
+a2dismod mpm_prefork mpm_worker
+a2enmod mpm_event
+systemctl start apache2
 
 # php.ini
 ln -s /etc/php/99-php.ini /etc/php/8.3/apache2/conf.d/99-php.ini

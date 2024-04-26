@@ -11,11 +11,15 @@ echo "" >> /etc/samba/smb.conf
 cat /home/ubuntu/smb.conf >> /etc/samba/smb.conf
 rm /home/ubuntu/smb.conf
 
+sudo mkdir -p /usr/local/smbbin
+sudo chown ubuntu:www-data /usr/local/smbbin
+sudo chmod 755 /usr/local/smbbin
 
+ln -s /usr/local/smbbin /home/ubuntu/bin
 # mkdir -p $LOCAL_SHAORE
 # sudo chmod 777 $LOCAL_SHAORE
 # sudo chown 1000:1000 $LOCAL_SHAORE
-# echo "$WINDOWS_SHARE $LOCAL_SHAORE cifs vers=3.0,credentials=/root/.smbcredentials,nounix,uid=1000,gid=1000,nounix,iocharset=utf8,dir_mode=02750,file_mode=0750,forceuid,forcegid,dom=WORKGROUP,mfsymlinks,cache=none,actimeo=0,closetimeo=0 0 0" >> /etc/fstab
+# echo "$WINDOWS_SHARE $LOCAL_SHAORE cifs vers=3.0,credentials=/root/.smbcredentials,nounix,uid=1000,gid=1000,nounix,iocharset=utf8,dir_mode=02750,file_mode=0750,forceuid,forcegid,dom=WORKGROUP,mfsymlinks,actimeo=0,closetimeo=0 0 0" >> /etc/fstab
 
 
 #cache=strict cache=loose
